@@ -127,12 +127,14 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "mediapipe" },
+    { name = "numpy" },
     { name = "opencv-python" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "mediapipe", specifier = ">=1.0.0" },
+    { name = "numpy", specifier = ">=2.5.1" },
     { name = "opencv-python", specifier = ">=4.12,<5" },
 ]
 

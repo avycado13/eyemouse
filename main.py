@@ -1,51 +1,169 @@
-import cv2
+import time
 
-# Capture video from webcam
+import cv2
+import mediapipe as mp
+import numpy as np
+
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+
+
+BaseOptions = python.BaseOptions
+FaceLandmarker = vision.FaceLandmarker
+FaceLandmarkerOptions = vision.FaceLandmarkerOptions
+RunningMode = vision.RunningMode
+
+
+options = FaceLandmarkerOptions(
+    base_options=BaseOptions(
+        model_asset_path="face_landmarker_v2_with_blendshapes.task"
+    ),
+    running_mode=RunningMode.VIDEO,
+    num_faces=1,
+)
+
+detector = FaceLandmarker.create_from_options(options)
+
+
+# MediaPipe face mesh iris points
+LEFT_IRIS = [
+    474,
+    475,
+    476,
+    477,
+]
+
+RIGHT_IRIS = [
+    469,
+    470,
+    471,
+    472,
+]
+
+
+def draw_landmarks(frame, landmarks):
+    h, w = frame.shape[:2]
+
+    for i, lm in enumerate(landmarks):
+        x = int(lm.x * w)
+        y = int(lm.y * h)
+
+        # normal face landmarks
+        cv2.circle(
+            frame,
+            (x, y),
+            1,
+            (0, 255, 0),
+            -1,
+        )
+
+    # iris points
+    for idx in LEFT_IRIS + RIGHT_IRIS:
+        lm = landmarks[idx]
+
+        x = int(lm.x * w)
+        y = int(lm.y * h)
+
+        cv2.circle(
+            frame,
+            (x, y),
+            4,
+            (0, 0, 255),
+            -1,
+        )
+
+
+def iris_center(landmarks, indexes):
+    points = []
+
+    for i in indexes:
+        points.append(
+            [
+                landmarks[i].x,
+                landmarks[i].y,
+            ]
+        )
+
+    points = np.array(points)
+
+    return points.mean(axis=0)
+
+
 cap = cv2.VideoCapture(0)
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
+
+start = time.time()
 
 
 while True:
     ret, frame = cap.read()
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+    if not ret:
+        break
 
-    for x, y, w, h in faces:
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
-        roi_gray = gray[y : y + h, x : x + w]
-        roi_color = frame[y : y + h, x : x + w]
+    rgb = cv2.cvtColor(
+        frame,
+        cv2.COLOR_BGR2RGB,
+    )
 
-        # Detect eyes within the face region
-        eyes = eye_cascade.detectMultiScale(roi_gray)
-        for ex, ey, ew, eh in eyes:
-            # cv2.rectangle(roi_color, (ex, ey), (ex + ew, ey + eh), (0, 255, 0), 2)
-            eye_gray = roi_gray[ey : ey + eh, ex : ex + ew]
-            eye_color = roi_color[ey : ey + eh, ex : ex + ew]
+    mp_image = mp.Image(
+        image_format=mp.ImageFormat.SRGB,
+        data=rgb,
+    )
 
-            blurred = cv2.GaussianBlur(eye_gray, (5, 5), 0)
+    timestamp = int((time.time() - start) * 1000)
 
-            thresh = cv2.adaptiveThreshold(
-                blurred,
-                255,
-                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                cv2.THRESH_BINARY_INV,
-                11,
-                2,
-            )
-            contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            contours = sorted(contours, key=lambda x: cv2.contourArea(x), reverse=True)
+    result = detector.detect_for_video(
+        mp_image,
+        timestamp,
+    )
 
-            if contours:
-                (cx, cy), radius = cv2.minEnclosingCircle(contours[0])
-                cv2.circle(eye_color, (int(cx), int(cy)), int(radius), (255, 0, 0), 2)
-                cv2.line(frame, (int(cx), int(cy)), (int(cx) + 50, int(cy)), (0, 255, 0), 2)
-                cv2.line(frame, (int(cx), int(cy)), (int(cx), int(cy) + 50), (0, 255, 0), 2)
-    cv2.imshow("Eye Detection", frame)
+    if result.face_landmarks:
+        landmarks = result.face_landmarks[0]
+
+        draw_landmarks(
+            frame,
+            landmarks,
+        )
+
+        left = iris_center(
+            landmarks,
+            LEFT_IRIS,
+        )
+
+        right = iris_center(
+            landmarks,
+            RIGHT_IRIS,
+        )
+
+        # Display normalized iris position
+        cv2.putText(
+            frame,
+            f"Left iris: {left[0]:.3f}, {left[1]:.3f}",
+            (20, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+
+        cv2.putText(
+            frame,
+            f"Right iris: {right[0]:.3f}, {right[1]:.3f}",
+            (20, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+
+    cv2.imshow(
+        "MediaPipe Iris Tracking",
+        frame,
+    )
 
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
+
 
 cap.release()
 cv2.destroyAllWindows()
