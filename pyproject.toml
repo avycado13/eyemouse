@@ -1,0 +1,10 @@
+[project]
+name = "eyemouse"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "mediapipe>=1.0.0",
+    "opencv-python>=4.12,<5",
+]
