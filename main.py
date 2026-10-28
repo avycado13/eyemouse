@@ -187,8 +187,9 @@ def gaze_to_screen(coeffs_x, coeffs_y, gaze_x, gaze_y):
     screen_x = coeffs_x[0] * gaze_x + coeffs_x[1] * gaze_y + coeffs_x[2]
     screen_y = coeffs_y[0] * gaze_x + coeffs_y[1] * gaze_y + coeffs_y[2]
 
-    screen_x = min(max(screen_x, 0), SCREEN_W - 1)
-    screen_y = min(max(screen_y, 0), SCREEN_H - 1)
+    margin = 1
+    screen_x = min(max(screen_x, margin), SCREEN_W - 1 - margin)
+    screen_y = min(max(screen_y, margin), SCREEN_H - 1 - margin)
 
     return screen_x, screen_y
 
@@ -231,7 +232,10 @@ while True:
             coeffs_x, coeffs_y, smoothed_x, smoothed_y
         )
 
-        pyautogui.moveTo(screen_x, screen_y)
+        try:
+            pyautogui.moveTo(screen_x, screen_y)
+        except pyautogui.FailSafeException:
+            print("fail-safe triggered, skipping move")
         print(f"mouse pos: {pyautogui.position()}")
 
     cv2.imshow("frame", frame)
